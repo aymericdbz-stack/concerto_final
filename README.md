@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Concerto Studio – Éditeur d'images IA
 
-## Getting Started
+Application Next.js (App Router + TypeScript) pour téléverser une image, décrire la transformation attendue et récupérer le rendu généré par le modèle Replicate `google/nano-banana`. Les images sources et générées ainsi que l'historique des projets sont stockés dans Supabase.
 
-First, run the development server:
+## Configuration rapide
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. **Installer les dépendances**
+   ```bash
+   npm install
+   ```
+2. **Variables d'environnement** – créer un fichier `.env.local` à la racine :
+   ```dotenv
+   NEXT_PUBLIC_SUPABASE_URL=...
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+   SUPABASE_SERVICE_ROLE_KEY=...
+   SUPABASE_INPUT_BUCKET=input-images
+   SUPABASE_OUTPUT_BUCKET=output-images
+   REPLICATE_API_TOKEN=...
+   REPLICATE_MODEL=google/nano-banana
+   ```
+   > Les valeurs de production sont déjà fournies dans l'énoncé. Conservez la clé `SUPABASE_SERVICE_ROLE_KEY` côté serveur uniquement.
+3. **Lancer le serveur de développement**
+   ```bash
+   npm run dev
+   ```
+   Ouvrez ensuite http://localhost:3000 pour accéder à l'interface.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Fonctionnalités principales
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Formulaire moderne pour téléverser une image, saisir le prompt et lancer la génération.
+- Aperçu instantané du fichier sélectionné et état de chargement pendant l'inférence.
+- Intégration Replicate pour appeler le modèle `google/nano-banana` avec l'image téléversée.
+- Upload des visuels vers Supabase Storage (`input-images` et `output-images`).
+- Traçabilité dans la table `projects` (`input_image_url`, `output_image_url`, `prompt`, `status`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Structure API
 
-## Learn More
+- `POST /api/generate`
+  - Reçoit `FormData` (`image`, `prompt`).
+  - Dépose l'image source dans Supabase, récupère l'URL publique.
+  - Lance Replicate et télécharge l'output retourné.
+  - Sauvegarde l'image générée + métadonnées dans Supabase.
+  - Retourne `{ imageUrl: string }` côté frontend.
 
-To learn more about Next.js, take a look at the following resources:
+## Aller plus loin
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Ajouter une galerie des projets passés en lisant la table `projects`.
+- Mettre en place une gestion d'authentification Supabase si l'éditeur doit être restreint.
+- Déployer sur Vercel avec les variables d'environnement correspondantes (onglet *Project Settings* > *Environment Variables*).
