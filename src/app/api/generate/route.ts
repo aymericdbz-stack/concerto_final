@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import Replicate from "replicate";
+import { DEFAULT_PROMPT } from "@/lib/constants";
+import { createSupabaseRouteClient, createSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import type { Database } from "@/types/supabase";
 
 export const runtime = "nodejs";
 
@@ -17,6 +19,8 @@ type EnvKey = (typeof REQUIRED_ENV_VARS)[number];
 type ReplicateModelName = `${string}/${string}` | `${string}/${string}:${string}`;
 
 type ReplicateResponse = unknown;
+type ProjectInsert = Database["public"]["Tables"]["projects"]["Insert"];
+type ProjectRow = Database["public"]["Tables"]["projects"]["Row"];
 
 const MIME_EXTENSION_MAP: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -27,9 +31,6 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
 };
 
 const URL_PREFIXES = ["http://", "https://", "data:"] as const;
-
-const DEFAULT_PROMPT =
-  "Transform the uploaded portrait so the person performs centre stage at a grand classical music concert. They play a classical instrument such as a grand piano, violin or cello, surrounded by a full symphony orchestra and conductor in an opulent concert hall. Keep facial likeness, formal black-tie attire, warm golden spotlights and polished wood stage. Avoid rock, pop, electric guitars, microphones or modern festival lighting.";
 
 function assertEnvVars(env: NodeJS.ProcessEnv): asserts env is NodeJS.ProcessEnv & Record<EnvKey, string> {
   const missing = REQUIRED_ENV_VARS.filter((key) => !env[key]?.length);
@@ -132,6 +133,15 @@ function normaliseReplicateOutput(output: ReplicateResponse): string | null {
 
 export async function POST(request: Request) {
   try {
+    const supabaseAuth = createSupabaseRouteClient();
+    const {
+      data: { session },
+    } = await supabaseAuth.auth.getSession();
+
+    if (!session) {
+      return NextResponse.json({ error: "Authentification requise." }, { status: 401 });
+    }
+
     assertEnvVars(process.env);
 
     const formData = await request.formData();
@@ -145,8 +155,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const inputBucket = process.env.SUPABASE_INPUT_BUCKET;
     const outputBucket = process.env.SUPABASE_OUTPUT_BUCKET;
     const replicateToken = process.env.REPLICATE_API_TOKEN;
@@ -154,7 +162,7 @@ export async function POST(request: Request) {
     assertReplicateModel(replicateModelCandidate);
     const replicateModel: ReplicateModelName = replicateModelCandidate;
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const adminSupabase = createSupabaseServiceRoleClient();
     const replicate = new Replicate({
       auth: replicateToken,
       userAgent: "concerto-image-editor/1.0",
@@ -165,7 +173,7 @@ export async function POST(request: Request) {
     const inputExtension = resolveExtension(file.name, file.type);
     const inputPath = `inputs/${crypto.randomUUID()}.${inputExtension}`;
 
-    const { error: uploadInputError } = await supabase.storage
+    const { error: uploadInputError } = await adminSupabase.storage
       .from(inputBucket)
       .upload(inputPath, fileBuffer, {
         cacheControl: "3600",
@@ -179,7 +187,7 @@ export async function POST(request: Request) {
 
     const {
       data: { publicUrl: inputPublicUrl },
-    } = supabase.storage.from(inputBucket).getPublicUrl(inputPath);
+    } = adminSupabase.storage.from(inputBucket).getPublicUrl(inputPath);
 
     if (!inputPublicUrl) {
       throw new Error("Impossible de générer l'URL publique de l'image source.");
@@ -209,7 +217,7 @@ export async function POST(request: Request) {
     const outputExtension = resolveExtension(`output.${outputContentType.split("/")[1] ?? "png"}`, outputContentType);
     const outputPath = `outputs/${crypto.randomUUID()}.${outputExtension}`;
 
-    const { error: uploadOutputError } = await supabase.storage
+    const { error: uploadOutputError } = await adminSupabase.storage
       .from(outputBucket)
       .upload(outputPath, Buffer.from(outputArrayBuffer), {
         cacheControl: "3600",
@@ -225,24 +233,31 @@ export async function POST(request: Request) {
 
     const {
       data: { publicUrl: outputPublicUrl },
-    } = supabase.storage.from(outputBucket).getPublicUrl(outputPath);
+    } = adminSupabase.storage.from(outputBucket).getPublicUrl(outputPath);
 
     if (!outputPublicUrl) {
       throw new Error("Impossible de générer l'URL publique de l'image générée.");
     }
 
-    const { error: insertError } = await supabase.from("projects").insert({
-      input_image_url: inputPublicUrl,
-      output_image_url: outputPublicUrl,
-      prompt,
-      status: "completed",
-    });
+    const { data: project, error: insertError } = await adminSupabase
+      .from("projects")
+      .insert([
+        {
+          user_id: session.user.id,
+          input_image_url: inputPublicUrl,
+          output_image_url: outputPublicUrl,
+          prompt,
+          status: "completed",
+        } satisfies ProjectInsert,
+      ])
+      .select()
+      .single<ProjectRow>();
 
     if (insertError) {
       throw new Error(`Échec de l'enregistrement du projet: ${insertError.message}`);
     }
 
-    return NextResponse.json({ imageUrl: outputPublicUrl });
+    return NextResponse.json({ imageUrl: outputPublicUrl, project });
   } catch (error) {
     console.error(error);
     if (error instanceof Error) {

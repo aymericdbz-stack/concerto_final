@@ -1,0 +1,2 @@
+export const DEFAULT_PROMPT =
+  "Transform the uploaded portrait so the person performs centre stage at a grand classical music concert. They play a classical instrument such as a grand piano, violin or cello, surrounded by a full symphony orchestra and conductor in an opulent concert hall. Keep facial likeness, formal black-tie attire, warm golden spotlights and polished wood stage. Avoid rock, pop, electric guitars, microphones or modern festival lighting.";

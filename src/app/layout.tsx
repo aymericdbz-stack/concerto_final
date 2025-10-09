@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/components/AuthContext";
+import { SiteHeader } from "@/components/SiteHeader";
 
 const manrope = Manrope({
   variable: "--font-sans-primary",
@@ -29,7 +31,10 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body className={`${manrope.variable} ${cormorant.variable} antialiased`}>
-        {children}
+        <AuthProvider>
+          <SiteHeader />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
