@@ -14,6 +14,7 @@ const REQUIRED_ENV_VARS = [
 ] as const;
 
 type EnvKey = (typeof REQUIRED_ENV_VARS)[number];
+type ReplicateModelName = `${string}/${string}` | `${string}/${string}:${string}`;
 
 type ReplicateResponse = unknown;
 
@@ -35,6 +36,12 @@ function assertEnvVars(env: NodeJS.ProcessEnv): asserts env is NodeJS.ProcessEnv
 
   if (missing.length > 0) {
     throw new Error(`Variables d'environnement manquantes: ${missing.join(", ")}`);
+  }
+}
+
+function assertReplicateModel(model: unknown): asserts model is ReplicateModelName {
+  if (typeof model !== "string" || !/^[^/]+\/[^/:]+(?::[^/:]+)?$/.test(model)) {
+    throw new Error(`REPLICATE_MODEL invalide: "${model ?? "undefined"}". Utilisez le format owner/model ou owner/model:version.`);
   }
 }
 
@@ -143,7 +150,9 @@ export async function POST(request: Request) {
     const inputBucket = process.env.SUPABASE_INPUT_BUCKET;
     const outputBucket = process.env.SUPABASE_OUTPUT_BUCKET;
     const replicateToken = process.env.REPLICATE_API_TOKEN;
-    const replicateModel = process.env.REPLICATE_MODEL;
+    const replicateModelCandidate = process.env.REPLICATE_MODEL;
+    assertReplicateModel(replicateModelCandidate);
+    const replicateModel: ReplicateModelName = replicateModelCandidate;
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const replicate = new Replicate({
