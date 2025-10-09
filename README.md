@@ -47,3 +47,4 @@ Application Next.js (App Router + TypeScript) pour téléverser une image, décr
 - Ajouter une galerie des projets passés en lisant la table `projects`.
 - Mettre en place une gestion d'authentification Supabase si l'éditeur doit être restreint.
 - Déployer sur Vercel avec les variables d'environnement correspondantes (onglet *Project Settings* > *Environment Variables*).
+# concerto_final
