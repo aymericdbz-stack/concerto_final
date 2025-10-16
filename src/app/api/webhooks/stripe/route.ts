@@ -17,7 +17,7 @@ function assertEnvVars(env: NodeJS.ProcessEnv): asserts env is NodeJS.ProcessEnv
   }
 }
 
-function toPaymentIntentId(paymentIntent: Stripe.Checkout.Session.PaymentIntent | null | undefined): string | null {
+function toPaymentIntentId(paymentIntent: Stripe.Checkout.Session["payment_intent"]): string | null {
   if (!paymentIntent) {
     return null;
   }

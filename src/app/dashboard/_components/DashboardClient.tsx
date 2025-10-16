@@ -2,7 +2,6 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { loadStripe } from "@stripe/stripe-js";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Database } from "@/types/supabase";
@@ -14,11 +13,6 @@ type Project = Database["public"]["Tables"]["projects"]["Row"];
 interface DashboardClientProps {
   initialProjects: Project[];
 }
-
-const stripePromise = (() => {
-  const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  return publishableKey ? loadStripe(publishableKey) : Promise.resolve(null);
-})();
 
 export function DashboardClient({ initialProjects }: DashboardClientProps) {
   const router = useRouter();
@@ -109,10 +103,6 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
       setErrorMessage("Merci de choisir un portrait avant de lancer la génération.");
       return;
     }
-    if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
-      setErrorMessage("Clé publique Stripe manquante. Vérifie la configuration Stripe.");
-      return;
-    }
 
     setIsCreatingCheckout(true);
     setStatusMessage("Création de la session de paiement…");
@@ -133,11 +123,12 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
 
       const payload = (await response.json().catch(() => ({}))) as {
         sessionId?: string;
+        sessionUrl?: string;
         project?: Project;
         error?: string;
       };
 
-      if (!response.ok || !payload.sessionId) {
+      if (!response.ok || !payload.sessionUrl) {
         throw new Error(payload.error ?? "Impossible de créer la session de paiement.");
       }
 
@@ -147,20 +138,7 @@ export function DashboardClient({ initialProjects }: DashboardClientProps) {
       }
 
       setStatusMessage("Redirection vers la page de paiement…");
-
-      const stripe = await stripePromise;
-
-      if (!stripe) {
-        throw new Error("Stripe n'est pas correctement configuré côté client.");
-      }
-
-      const { error } = await stripe.redirectToCheckout({
-        sessionId: payload.sessionId,
-      });
-
-      if (error) {
-        throw new Error(error.message ?? "Redirection vers Stripe impossible.");
-      }
+      window.location.href = payload.sessionUrl;
     } catch (error) {
       console.error(error);
       setErrorMessage(

@@ -169,6 +169,10 @@ export async function POST(request: Request) {
       cancel_url: `${originUrl}/dashboard`,
     });
 
+    if (!checkoutSession.url) {
+      throw new Error("Stripe a renvoyé une session sans URL de redirection.");
+    }
+
     const { error: updateError } = await adminSupabase
       .from("projects")
       .update({
@@ -180,7 +184,11 @@ export async function POST(request: Request) {
       throw new Error(`Échec de la mise à jour du projet avec la session Stripe: ${updateError.message}`);
     }
 
-    return NextResponse.json({ sessionId: checkoutSession.id, project });
+    return NextResponse.json({
+      sessionId: checkoutSession.id,
+      sessionUrl: checkoutSession.url,
+      project,
+    });
   } catch (error) {
     console.error("[create-checkout-session] Erreur:", error);
 
