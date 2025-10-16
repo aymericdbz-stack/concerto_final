@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { DEFAULT_PROMPT } from "@/lib/constants";
+import { DEFAULT_PROMPT, DEFAULT_SUPABASE_INPUT_BUCKET } from "@/lib/constants";
 import { createSupabaseRouteClient, createSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { ensureBucketExists } from "@/lib/supabase-storage";
 import type { Database } from "@/types/supabase";
 
 export const runtime = "nodejs";
 
-const REQUIRED_ENV_VARS = [
-  "STRIPE_SECRET_KEY",
-  "NEXT_PUBLIC_URL",
-  "SUPABASE_INPUT_BUCKET",
-] as const;
+const REQUIRED_ENV_VARS = ["STRIPE_SECRET_KEY", "NEXT_PUBLIC_URL"] as const;
 
 const PRICE_UNIT_AMOUNT = 200; // 2.00 EUR in cents
 const PRICE_AMOUNT = 2.0;
@@ -31,7 +28,7 @@ function assertEnvVars(env: NodeJS.ProcessEnv): asserts env is NodeJS.ProcessEnv
   const missing = REQUIRED_ENV_VARS.filter((key) => !env[key]?.length);
 
   if (missing.length > 0) {
-    throw new Error(`Variables d'environnement Stripe manquantes: ${missing.join(", ")}`);
+    throw new Error(`Variables d'environnement manquantes: ${missing.join(", ")}`);
   }
 }
 
@@ -85,11 +82,17 @@ export async function POST(request: Request) {
         ? promptCandidate.trim()
         : DEFAULT_PROMPT;
 
-    const inputBucket = process.env.SUPABASE_INPUT_BUCKET;
+    const inputBucket = process.env.SUPABASE_INPUT_BUCKET ?? DEFAULT_SUPABASE_INPUT_BUCKET;
+    if (!process.env.SUPABASE_INPUT_BUCKET) {
+      console.warn(
+        `[create-checkout-session] SUPABASE_INPUT_BUCKET manquant, utilisation du bucket par défaut "${inputBucket}".`
+      );
+    }
     inputBucketName = inputBucket;
     const originUrl = process.env.NEXT_PUBLIC_URL;
 
     adminSupabase = createSupabaseServiceRoleClient();
+    await ensureBucketExists(adminSupabase, inputBucket);
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());
     const inputExtension = resolveExtension(file.name, file.type);

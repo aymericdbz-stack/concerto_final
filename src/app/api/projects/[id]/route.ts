@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseRouteClient, createSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { Database } from "@/types/supabase";
+import {
+  DEFAULT_SUPABASE_INPUT_BUCKET,
+  DEFAULT_SUPABASE_OUTPUT_BUCKET,
+} from "@/lib/constants";
+import { ensureBucketExists } from "@/lib/supabase-storage";
 
 function extractStoragePath(publicUrl: string, bucket: string): string | null {
   try {
@@ -33,11 +38,18 @@ export async function DELETE(
       return NextResponse.json({ error: "Authentification requise." }, { status: 401 });
     }
 
-    const inputBucket = process.env.SUPABASE_INPUT_BUCKET;
-    const outputBucket = process.env.SUPABASE_OUTPUT_BUCKET;
+    const inputBucket = process.env.SUPABASE_INPUT_BUCKET ?? DEFAULT_SUPABASE_INPUT_BUCKET;
+    const outputBucket = process.env.SUPABASE_OUTPUT_BUCKET ?? DEFAULT_SUPABASE_OUTPUT_BUCKET;
 
-    if (!inputBucket || !outputBucket) {
-      return NextResponse.json({ error: "Configuration Supabase incomplète." }, { status: 500 });
+    if (!process.env.SUPABASE_INPUT_BUCKET) {
+      console.warn(
+        `[projects-delete] SUPABASE_INPUT_BUCKET manquant, utilisation du bucket par défaut "${inputBucket}".`
+      );
+    }
+    if (!process.env.SUPABASE_OUTPUT_BUCKET) {
+      console.warn(
+        `[projects-delete] SUPABASE_OUTPUT_BUCKET manquant, utilisation du bucket par défaut "${outputBucket}".`
+      );
     }
 
     const { data: project, error: fetchError } = await supabaseAuth
@@ -59,6 +71,8 @@ export async function DELETE(
     }
 
     const adminSupabase = createSupabaseServiceRoleClient();
+    await ensureBucketExists(adminSupabase, inputBucket);
+    await ensureBucketExists(adminSupabase, outputBucket);
 
     const inputPath = extractStoragePath(project.input_image_url, inputBucket);
     const outputPath = project.output_image_url

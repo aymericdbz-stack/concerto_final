@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import Replicate from "replicate";
-import { DEFAULT_PROMPT } from "@/lib/constants";
+import { DEFAULT_PROMPT, DEFAULT_SUPABASE_OUTPUT_BUCKET } from "@/lib/constants";
 import { createSupabaseRouteClient, createSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { ensureBucketExists } from "@/lib/supabase-storage";
 import type { Database } from "@/types/supabase";
 
 export const runtime = "nodejs";
@@ -9,7 +10,6 @@ export const runtime = "nodejs";
 const REQUIRED_ENV_VARS = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
-  "SUPABASE_OUTPUT_BUCKET",
   "REPLICATE_API_TOKEN",
   "REPLICATE_MODEL",
 ] as const;
@@ -255,7 +255,13 @@ export async function POST(request: Request) {
       throw new Error("Impossible de télécharger l'image générée par Replicate.");
     }
 
-    const outputBucket = process.env.SUPABASE_OUTPUT_BUCKET;
+    const outputBucket = process.env.SUPABASE_OUTPUT_BUCKET ?? DEFAULT_SUPABASE_OUTPUT_BUCKET;
+    if (!process.env.SUPABASE_OUTPUT_BUCKET) {
+      console.warn(
+        `[generate] SUPABASE_OUTPUT_BUCKET manquant, utilisation du bucket par défaut "${outputBucket}".`
+      );
+    }
+    await ensureBucketExists(adminSupabase, outputBucket);
     const outputArrayBuffer = await generatedResponse.arrayBuffer();
     const outputContentType = generatedResponse.headers.get("content-type") ?? "image/png";
     const outputExtension = resolveExtension(
