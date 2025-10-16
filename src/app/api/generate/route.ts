@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import Replicate from "replicate";
-import { DEFAULT_PROMPT, DEFAULT_SUPABASE_OUTPUT_BUCKET } from "@/lib/constants";
+import {
+  DEFAULT_PROMPT,
+  DEFAULT_SUPABASE_OUTPUT_BUCKET,
+  DEFAULT_REPLICATE_MODEL,
+} from "@/lib/constants";
 import { createSupabaseRouteClient, createSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { ensureBucketExists } from "@/lib/supabase-storage";
 import type { Database } from "@/types/supabase";
@@ -11,7 +15,6 @@ const REQUIRED_ENV_VARS = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
   "REPLICATE_API_TOKEN",
-  "REPLICATE_MODEL",
 ] as const;
 
 type EnvKey = (typeof REQUIRED_ENV_VARS)[number];
@@ -211,7 +214,12 @@ export async function POST(request: Request) {
     }
 
     const replicateToken = process.env.REPLICATE_API_TOKEN;
-    const replicateModelCandidate = process.env.REPLICATE_MODEL;
+    const replicateModelCandidate = process.env.REPLICATE_MODEL ?? DEFAULT_REPLICATE_MODEL;
+    if (!process.env.REPLICATE_MODEL) {
+      console.warn(
+        `[generate] REPLICATE_MODEL manquant, utilisation du modèle par défaut "${replicateModelCandidate}".`
+      );
+    }
     assertReplicateModel(replicateModelCandidate);
     const replicateModel: ReplicateModelName = replicateModelCandidate;
 

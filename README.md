@@ -16,6 +16,7 @@ Application Next.js (App Router + TypeScript) pour téléverser une image, décr
    SUPABASE_INPUT_BUCKET=input-images
    SUPABASE_OUTPUT_BUCKET=output-images
    REPLICATE_API_TOKEN=...
+   # REPLICATE_MODEL est facultatif, la valeur "google/nano-banana" est utilisée par défaut
    REPLICATE_MODEL=google/nano-banana
    ```
    > Les valeurs de production sont déjà fournies dans l'énoncé. Conservez la clé `SUPABASE_SERVICE_ROLE_KEY` côté serveur uniquement.

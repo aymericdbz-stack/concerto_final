@@ -3,3 +3,4 @@ export const DEFAULT_PROMPT =
 
 export const DEFAULT_SUPABASE_INPUT_BUCKET = "input-images";
 export const DEFAULT_SUPABASE_OUTPUT_BUCKET = "output-images";
+export const DEFAULT_REPLICATE_MODEL = "google/nano-banana";
