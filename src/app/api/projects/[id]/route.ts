@@ -61,7 +61,9 @@ export async function DELETE(
     const adminSupabase = createSupabaseServiceRoleClient();
 
     const inputPath = extractStoragePath(project.input_image_url, inputBucket);
-    const outputPath = extractStoragePath(project.output_image_url, outputBucket);
+    const outputPath = project.output_image_url
+      ? extractStoragePath(project.output_image_url, outputBucket)
+      : null;
 
     const removalErrors = [];
 
