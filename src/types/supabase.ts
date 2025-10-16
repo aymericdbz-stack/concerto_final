@@ -7,6 +7,7 @@ export type Json =
   | Json[];
 
 export type ProjectStatus = "pending" | "processing" | "completed" | "failed";
+export type ProjectPaymentStatus = "pending" | "paid" | "failed";
 
 export interface Database {
   public: {
@@ -17,18 +18,26 @@ export interface Database {
           created_at: string;
           user_id: string;
           input_image_url: string;
-          output_image_url: string;
+          output_image_url: string | null;
           prompt: string | null;
           status: ProjectStatus | null;
+          payment_status: ProjectPaymentStatus | null;
+          payment_amount: number | null;
+          stripe_payment_intent_id: string | null;
+          stripe_checkout_session_id: string | null;
         };
         Insert: {
           id?: string;
           created_at?: string;
           user_id: string;
           input_image_url: string;
-          output_image_url: string;
+          output_image_url?: string | null;
           prompt?: string | null;
           status?: ProjectStatus | null;
+          payment_status?: ProjectPaymentStatus | null;
+          payment_amount?: number | null;
+          stripe_payment_intent_id?: string | null;
+          stripe_checkout_session_id?: string | null;
         };
         Update: Partial<Omit<Database["public"]["Tables"]["projects"]["Insert"], "user_id">> & {
           user_id?: string;
