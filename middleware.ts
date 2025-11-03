@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import type { Database } from "@/types/supabase";
 
-const PROTECTED_API_PREFIXES = ["/api/generate", "/api/projects"];
+const PROTECTED_API_PREFIXES = ["/api/create-checkout-session", "/api/registrations"];
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
@@ -32,5 +32,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/api/generate/:path*", "/api/projects/:path*"],
+  matcher: ["/dashboard", "/api/create-checkout-session", "/api/registrations/:path*"],
 };

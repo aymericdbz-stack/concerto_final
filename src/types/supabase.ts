@@ -6,45 +6,50 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
-export type ProjectStatus = "pending" | "processing" | "completed" | "failed";
-export type ProjectPaymentStatus = "pending" | "paid" | "failed";
+export type RegistrationStatus = "pending" | "paid" | "cancelled";
 
 export interface Database {
   public: {
     Tables: {
-      projects: {
+      registrations: {
         Row: {
           id: string;
           created_at: string;
           user_id: string;
-          input_image_url: string;
-          output_image_url: string | null;
-          prompt: string | null;
-          status: ProjectStatus | null;
-          payment_status: ProjectPaymentStatus | null;
-          payment_amount: number | null;
+          event_id: string;
+          first_name: string;
+          last_name: string;
+          email: string;
+          phone: string;
+          amount: number;
+          currency: string;
+          status: RegistrationStatus;
           stripe_payment_intent_id: string | null;
           stripe_checkout_session_id: string | null;
+          qr_code_data_url: string | null;
         };
         Insert: {
           id?: string;
           created_at?: string;
           user_id: string;
-          input_image_url: string;
-          output_image_url?: string | null;
-          prompt?: string | null;
-          status?: ProjectStatus | null;
-          payment_status?: ProjectPaymentStatus | null;
-          payment_amount?: number | null;
+          event_id: string;
+          first_name: string;
+          last_name: string;
+          email: string;
+          phone: string;
+          amount: number;
+          currency?: string;
+          status?: RegistrationStatus;
           stripe_payment_intent_id?: string | null;
           stripe_checkout_session_id?: string | null;
+          qr_code_data_url?: string | null;
         };
-        Update: Partial<Omit<Database["public"]["Tables"]["projects"]["Insert"], "user_id">> & {
+        Update: Partial<Omit<Database["public"]["Tables"]["registrations"]["Insert"], "user_id">> & {
           user_id?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "projects_user_id_fkey";
+            foreignKeyName: "registrations_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "users";
             referencedColumns: ["id"];

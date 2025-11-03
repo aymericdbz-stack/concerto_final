@@ -1,51 +1,74 @@
-# Concerto Studio – Éditeur d'images IA
+# Concerto — Réservation de concerts intimistes
 
-Application Next.js (App Router + TypeScript) pour téléverser une image, décrire la transformation attendue et récupérer le rendu généré par le modèle Replicate `google/nano-banana`. Les images sources et générées ainsi que l'historique des projets sont stockés dans Supabase.
+Application Next.js (App Router + TypeScript) pensée pour gérer un unique concert acoustique : **« Sous la voûte de l'Étoile »** au Temple de l'Étoile (Paris). Le site propose une refonte claire et lumineuse basée sur les composants *shadcn/ui* et permet :
 
-## Configuration rapide
+- la création d’un espace abonné via Supabase Auth ;
+- la réservation d’un concert avec un **montant de participation libre** réglé sur Stripe ;
+- l’envoi automatique d’un email de confirmation avec QR code (via Resend) une fois le paiement confirmé ;
+- la consultation et le téléchargement du QR code directement depuis le tableau de bord de l’abonné.
 
-1. **Installer les dépendances**
+## Installation rapide
+
+1. **Dépendances**
    ```bash
    npm install
    ```
-2. **Variables d'environnement** – créer un fichier `.env.local` à la racine :
+2. **Variables d’environnement** – créer un fichier `.env.local` à la racine :
    ```dotenv
    NEXT_PUBLIC_SUPABASE_URL=...
    NEXT_PUBLIC_SUPABASE_ANON_KEY=...
    SUPABASE_SERVICE_ROLE_KEY=...
-   SUPABASE_INPUT_BUCKET=input-images
-   SUPABASE_OUTPUT_BUCKET=output-images
-   REPLICATE_API_TOKEN=...
-   # REPLICATE_MODEL est facultatif, la valeur "google/nano-banana" est utilisée par défaut
-   REPLICATE_MODEL=google/nano-banana
+   STRIPE_SECRET_KEY=...
+   STRIPE_WEBHOOK_SECRET=...
+   NEXT_PUBLIC_URL=http://localhost:3000
+   RESEND_API_KEY=...
+   RESEND_FROM_EMAIL=concerto@example.com
    ```
-   > Les valeurs de production sont déjà fournies dans l'énoncé. Conservez la clé `SUPABASE_SERVICE_ROLE_KEY` côté serveur uniquement.
-3. **Lancer le serveur de développement**
+   > `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY` et `RESEND_API_KEY` doivent rester côté serveur.  
+   > `NEXT_PUBLIC_URL` doit pointer vers l’URL publique du site (sans slash final).
+
+3. **Lancement**
    ```bash
    npm run dev
    ```
-   Ouvrez ensuite http://localhost:3000 pour accéder à l'interface.
+   Puis ouvrir http://localhost:3000.
 
-## Fonctionnalités principales
+## Modèle de données
 
-- Formulaire moderne pour téléverser une image, saisir le prompt et lancer la génération.
-- Aperçu instantané du fichier sélectionné et état de chargement pendant l'inférence.
-- Intégration Replicate pour appeler le modèle `google/nano-banana` avec l'image téléversée.
-- Upload des visuels vers Supabase Storage (`input-images` et `output-images`).
-- Traçabilité dans la table `projects` (`input_image_url`, `output_image_url`, `prompt`, `status`).
+La table Supabase `registrations` (cf. `src/types/supabase.ts`) contient :
 
-## Structure API
+| Colonne | Type | Description |
+| --- | --- | --- |
+| `id` | UUID | Identifiant unique |
+| `user_id` | UUID | Référence à l’utilisateur Supabase |
+| `event_id` | text | Identifiant du concert (`sous-la-voute-de-l-etoile-20250116`) |
+| `first_name` / `last_name` / `email` / `phone` | text | Coordonnées participant |
+| `amount` / `currency` | numeric / text | Don libre choisi par l’abonné |
+| `status` | enum | `pending`, `paid`, `cancelled` |
+| `stripe_checkout_session_id` / `stripe_payment_intent_id` | text | Références Stripe |
+| `qr_code_data_url` | text | QR code généré (PNG encodé en Data URL) |
+| `created_at` | timestamptz | Date de création |
 
-- `POST /api/generate`
-  - Reçoit `FormData` (`image`, `prompt`).
-  - Dépose l'image source dans Supabase, récupère l'URL publique.
-  - Lance Replicate et télécharge l'output retourné.
-  - Sauvegarde l'image générée + métadonnées dans Supabase.
-  - Retourne `{ imageUrl: string }` côté frontend.
+## Webhooks & emails
 
-## Aller plus loin
+- Le webhook `POST /api/webhooks/stripe` vérifie la signature Stripe, marque la réservation comme payée et génère un QR code via `qrcode`.
+- L’email de confirmation est envoyé avec Resend (`RESEND_FROM_EMAIL` doit être un domaine vérifié). Le QR code base64 est intégré directement dans le message.
 
-- Ajouter une galerie des projets passés en lisant la table `projects`.
-- Mettre en place une gestion d'authentification Supabase si l'éditeur doit être restreint.
-- Déployer sur Vercel avec les variables d'environnement correspondantes (onglet *Project Settings* > *Environment Variables*).
-# concerto_final
+## Développement
+
+- Couleurs et typographies sont centralisées dans `src/app/globals.css`.
+- Les composants *shadcn/ui* utilisés (Button, Input, Card, Label…) se trouvent dans `src/components/ui`.
+- L’événement affiché est défini dans `src/lib/constants.ts`. Pour ajouter de nouveaux concerts, étendre `CONCERT_EVENTS` et adapter le tableau de bord.
+
+## Scripts utiles
+
+- `npm run dev` — lancement en mode développement
+- `npm run build` — compilation production
+- `npm start` — serveur de production
+- `npm run lint` — linting avec ESLint
+
+## Remarques
+
+- Veiller à configurer Stripe Checkout avec l’URL de retour (`NEXT_PUBLIC_URL`) et à exposer le webhook Stripe à `/api/webhooks/stripe`.
+- Les tests de paiement peuvent s’effectuer avec une carte de test Stripe (`4242 4242 4242 4242`).
+- Pour un déploiement sur Vercel, déclarer l’ensemble des variables d’environnement ci-dessus dans *Project Settings → Environment Variables*.

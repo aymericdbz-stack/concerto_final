@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type AuthMode = "login" | "signup";
 
@@ -119,143 +122,119 @@ export function AuthForm({ initialMode = "login" }: AuthFormProps) {
   }
 
   return (
-    <div className="w-full max-w-md rounded-2xl border border-white/10 bg-black/60 p-8 text-white shadow-2xl backdrop-blur">
-      <div className="mb-6 flex items-center justify-between text-sm uppercase tracking-[0.3em] text-white/70">
-        <button
-          type="button"
-          className={`pb-2 transition ${
-            mode === "login"
-              ? "border-b-2 border-[var(--accent)] text-white"
-              : "hover:text-white"
-          }`}
-          onClick={() => setMode("login")}
-          disabled={isSubmitting}
-        >
-          Connexion
-        </button>
-        <button
-          type="button"
-          className={`pb-2 transition ${
-            mode === "signup"
-              ? "border-b-2 border-[var(--accent)] text-white"
-              : "hover:text-white"
-          }`}
-          onClick={() => setMode("signup")}
-          disabled={isSubmitting}
-        >
-          Inscription
-        </button>
-      </div>
-
-      <form className="space-y-5" onSubmit={handleSubmit}>
-        <div className="space-y-2">
-          <label className="text-xs uppercase tracking-[0.3em] text-white/60">
-            Email
-          </label>
-          <input
-            type="email"
-            className="w-full rounded-lg border border-white/10 bg-white/10 px-4 py-3 text-base text-white outline-none transition focus:border-[var(--accent)] focus:bg-black/50"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-            disabled={isSubmitting || loading}
-          />
-          {errors.email ? <p className="text-sm text-red-400">{errors.email}</p> : null}
+    <Card className="w-full max-w-md rounded-[28px] border border-[#eadacf] bg-white/90 shadow-2xl shadow-[#7a1c1a]/10">
+      <CardHeader className="flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setMode("login")}
+            disabled={isSubmitting}
+            className={`text-xs font-semibold uppercase tracking-[0.32em] ${
+              mode === "login" ? "text-[#7a1c1a]" : "text-neutral-400"
+            }`}
+          >
+            Connexion
+          </button>
+          <div className="h-4 w-px bg-neutral-200" />
+          <button
+            type="button"
+            onClick={() => setMode("signup")}
+            disabled={isSubmitting}
+            className={`text-xs font-semibold uppercase tracking-[0.32em] ${
+              mode === "signup" ? "text-[#7a1c1a]" : "text-neutral-400"
+            }`}
+          >
+            Inscription
+          </button>
         </div>
+        <CardTitle className="text-3xl text-[#4b2a1d]">
+          {isSignup ? "Rejoins la saison Concerto" : "Ravie de te retrouver"}
+        </CardTitle>
+      </CardHeader>
 
-        <div className="space-y-2">
-          <label className="text-xs uppercase tracking-[0.3em] text-white/60">
-            Mot de passe
-          </label>
-          <input
-            type="password"
-            className="w-full rounded-lg border border-white/10 bg-white/10 px-4 py-3 text-base text-white outline-none transition focus:border-[var(--accent)] focus:bg-black/50"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete={isSignup ? "new-password" : "current-password"}
-            disabled={isSubmitting || loading}
-          />
-          {errors.password ? (
-            <p className="text-sm text-red-400">{errors.password}</p>
-          ) : null}
-        </div>
-
-        {isSignup ? (
+      <CardContent className="space-y-6">
+        <form className="space-y-5" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <label className="text-xs uppercase tracking-[0.3em] text-white/60">
-              Confirmer le mot de passe
-            </label>
-            <input
-              type="password"
-              className="w-full rounded-lg border border-white/10 bg-white/10 px-4 py-3 text-base text-white outline-none transition focus:border-[var(--accent)] focus:bg-black/50"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              autoComplete="new-password"
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="email"
               disabled={isSubmitting || loading}
+              placeholder="ton.email@email.com"
             />
-            {errors.confirm ? (
-              <p className="text-sm text-red-400">{errors.confirm}</p>
-            ) : null}
+            {errors.email ? <p className="text-sm text-red-500">{errors.email}</p> : null}
           </div>
-        ) : null}
 
-        {errors.global ? (
-          <p className="text-sm text-red-400">{errors.global}</p>
-        ) : null}
+          <div className="space-y-2">
+            <Label htmlFor="password">Mot de passe</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete={isSignup ? "new-password" : "current-password"}
+              disabled={isSubmitting || loading}
+              placeholder="••••••••"
+            />
+            {errors.password ? <p className="text-sm text-red-500">{errors.password}</p> : null}
+          </div>
 
-        {successMessage ? (
-          <p className="text-sm text-emerald-400">{successMessage}</p>
-        ) : null}
+          {isSignup ? (
+            <div className="space-y-2">
+              <Label htmlFor="confirm">Confirmer le mot de passe</Label>
+              <Input
+                id="confirm"
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                autoComplete="new-password"
+                disabled={isSubmitting || loading}
+                placeholder="••••••••"
+              />
+              {errors.confirm ? <p className="text-sm text-red-500">{errors.confirm}</p> : null}
+            </div>
+          ) : null}
 
-        <button
-          type="submit"
-          className="w-full rounded-lg bg-[var(--accent)] py-3 text-sm font-semibold uppercase tracking-[0.3em] text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={isSubmitting || loading}
-        >
-          {isSubmitting ? "Veuillez patienter…" : mode === "login" ? "Se connecter" : "Créer un compte"}
-        </button>
-      </form>
+          {errors.global ? <p className="text-sm text-red-500">{errors.global}</p> : null}
+          {successMessage ? <p className="text-sm text-emerald-600">{successMessage}</p> : null}
 
-      <p className="mt-6 text-center text-sm text-white/70">
-        {mode === "login" ? (
-          <>
-            Pas de compte ?{" "}
-            <button
-              type="button"
-              className="text-[var(--accent)] underline"
-              onClick={() => setMode("signup")}
-              disabled={isSubmitting}
-            >
-              Inscris-toi
-            </button>
-          </>
-        ) : (
-          <>
-            Déjà inscrit ?{" "}
-            <button
-              type="button"
-              className="text-[var(--accent)] underline"
-              onClick={() => setMode("login")}
-              disabled={isSubmitting}
-            >
-              Connecte-toi
-            </button>
-          </>
-        )}
-      </p>
+          <Button type="submit" disabled={isSubmitting || loading} className="w-full">
+            {isSubmitting ? "Veuillez patienter…" : isSignup ? "Créer mon compte" : "Se connecter"}
+          </Button>
+        </form>
 
-      {mode === "login" ? (
-        <p className="mt-4 text-center text-xs uppercase tracking-[0.3em] text-white/40">
-          Nouveau ici ? <Link href="/signup" className="text-[var(--accent)]">Créer un compte</Link>
-        </p>
-      ) : (
-        <p className="mt-4 text-center text-xs uppercase tracking-[0.3em] text-white/40">
-          Tu as déjà un compte ?{" "}
-          <Link href="/login" className="text-[var(--accent)]">
-            Connecte-toi
-          </Link>
-        </p>
-      )}
-    </div>
+        <div className="text-center text-sm text-neutral-500">
+          {mode === "login" ? (
+            <>
+              Pas encore de compte ?{" "}
+              <button
+                type="button"
+                className="font-semibold text-[#7a1c1a] underline-offset-4 hover:underline"
+                onClick={() => setMode("signup")}
+                disabled={isSubmitting}
+              >
+                Inscris-toi
+              </button>
+            </>
+          ) : (
+            <>
+              Tu as déjà un compte ?{" "}
+              <button
+                type="button"
+                className="font-semibold text-[#7a1c1a] underline-offset-4 hover:underline"
+                onClick={() => setMode("login")}
+                disabled={isSubmitting}
+              >
+                Connecte-toi
+              </button>
+            </>
+          )}
+        </div>
+
+      </CardContent>
+    </Card>
   );
 }

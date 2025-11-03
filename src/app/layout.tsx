@@ -18,9 +18,9 @@ const cormorant = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
-  title: "Concerto Final – Portraits partagés",
+  title: "Concerto — Sous la voûte de l'Étoile",
   description:
-    "Partagez votre portrait pour l'expérience immersive du concert Concerto Final du 18 décembre.",
+    "Réserve ta place pour le concert « Sous la voûte de l'Étoile » et retrouve ton QR code dans ton espace abonné Concerto.",
 };
 
 export default function RootLayout({

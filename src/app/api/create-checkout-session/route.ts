@@ -1,28 +1,16 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { DEFAULT_PROMPT, DEFAULT_SUPABASE_INPUT_BUCKET } from "@/lib/constants";
+import { DEFAULT_CURRENCY, MAIN_EVENT, MAIN_EVENT_ID } from "@/lib/constants";
 import { createSupabaseRouteClient, createSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { ensureBucketExists } from "@/lib/supabase-storage";
 import type { Database } from "@/types/supabase";
 
 export const runtime = "nodejs";
 
 const REQUIRED_ENV_VARS = ["STRIPE_SECRET_KEY", "NEXT_PUBLIC_URL"] as const;
 
-const PRICE_UNIT_AMOUNT = 200; // 2.00 EUR in cents
-const PRICE_AMOUNT = 2.0;
-
 type EnvKey = (typeof REQUIRED_ENV_VARS)[number];
-type ProjectInsert = Database["public"]["Tables"]["projects"]["Insert"];
-type ProjectRow = Database["public"]["Tables"]["projects"]["Row"];
-
-const MIME_EXTENSION_MAP: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/heic": "heic",
-  "image/heif": "heic",
-};
+type RegistrationInsert = Database["public"]["Tables"]["registrations"]["Insert"];
+type RegistrationRow = Database["public"]["Tables"]["registrations"]["Row"];
 
 function assertEnvVars(env: NodeJS.ProcessEnv): asserts env is NodeJS.ProcessEnv & Record<EnvKey, string> {
   const missing = REQUIRED_ENV_VARS.filter((key) => !env[key]?.length);
@@ -32,20 +20,22 @@ function assertEnvVars(env: NodeJS.ProcessEnv): asserts env is NodeJS.ProcessEnv
   }
 }
 
-function resolveExtension(fileName: string, mimeType?: string): string {
-  if (mimeType && MIME_EXTENSION_MAP[mimeType]) {
-    return MIME_EXTENSION_MAP[mimeType];
-  }
+interface CheckoutPayload {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  amount?: number | string;
+  eventId?: string;
+}
 
-  const [, extension] = /\.([a-zA-Z0-9]+)$/.exec(fileName ?? "") ?? [];
-  return extension?.toLowerCase() ?? "png";
+function isTruthyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 export async function POST(request: Request) {
   let adminSupabase: ReturnType<typeof createSupabaseServiceRoleClient> | null = null;
-  let uploadedInputPath: string | null = null;
-  let inputBucketName: string | null = null;
-  let createdProjectId: string | null = null;
+  let createdRegistrationId: string | null = null;
 
   try {
     assertEnvVars(process.env);
@@ -64,112 +54,112 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Authentification requise." }, { status: 401 });
     }
 
-    const formData = await request.formData();
-    const projectIdCandidate = formData.get("projectId");
-    const file = formData.get("image");
-    const promptCandidate = formData.get("prompt");
-
-    if (!projectIdCandidate || typeof projectIdCandidate !== "string") {
-      return NextResponse.json({ error: "Identifiant de projet manquant." }, { status: 400 });
+    let payload: CheckoutPayload;
+    try {
+      payload = (await request.json()) as CheckoutPayload;
+    } catch {
+      return NextResponse.json({ error: "Corps de requête invalide." }, { status: 400 });
     }
 
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: "Aucun fichier image reçu." }, { status: 400 });
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return NextResponse.json({ error: "Corps de requête invalide." }, { status: 400 });
     }
 
-    const prompt =
-      typeof promptCandidate === "string" && promptCandidate.trim().length > 0
-        ? promptCandidate.trim()
-        : DEFAULT_PROMPT;
+    const firstName = payload.firstName?.toString().trim();
+    const lastName = payload.lastName?.toString().trim();
+    const email = payload.email?.toString().trim().toLowerCase();
+    const phone = payload.phone?.toString().trim();
+    const eventId = isTruthyString(payload.eventId) ? payload.eventId : MAIN_EVENT_ID;
 
-    const inputBucket = process.env.SUPABASE_INPUT_BUCKET ?? DEFAULT_SUPABASE_INPUT_BUCKET;
-    if (!process.env.SUPABASE_INPUT_BUCKET) {
-      console.warn(
-        `[create-checkout-session] SUPABASE_INPUT_BUCKET manquant, utilisation du bucket par défaut "${inputBucket}".`
+    if (!firstName) {
+      return NextResponse.json({ error: "Le prénom est requis." }, { status: 400 });
+    }
+    if (!lastName) {
+      return NextResponse.json({ error: "Le nom est requis." }, { status: 400 });
+    }
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return NextResponse.json({ error: "Adresse email invalide." }, { status: 400 });
+    }
+    if (!phone) {
+      return NextResponse.json({ error: "Le numéro de téléphone est requis." }, { status: 400 });
+    }
+
+    const amountNumber = Number.parseFloat(payload.amount as string);
+
+    if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+      return NextResponse.json(
+        { error: "Merci d'indiquer un montant de participation supérieur à 0 €." },
+        { status: 400 }
       );
     }
-    inputBucketName = inputBucket;
+
+    const amountInCents = Math.round(amountNumber * 100);
+    if (amountInCents < 100) {
+      return NextResponse.json(
+        { error: "Le montant minimum est de 1 €." },
+        { status: 400 }
+      );
+    }
+
     const originUrl = process.env.NEXT_PUBLIC_URL;
-
     adminSupabase = createSupabaseServiceRoleClient();
-    await ensureBucketExists(adminSupabase, inputBucket);
 
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
-    const inputExtension = resolveExtension(file.name, file.type);
-    const inputPath = `inputs/${projectIdCandidate}-${Date.now()}.${inputExtension}`;
-    uploadedInputPath = inputPath;
-
-    const { error: uploadInputError } = await adminSupabase.storage
-      .from(inputBucket)
-      .upload(inputPath, fileBuffer, {
-        cacheControl: "3600",
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
-      });
-
-    if (uploadInputError) {
-      throw new Error(
-        `Échec de l'upload de l'image source dans le bucket ${inputBucket}: ${uploadInputError.message}`
-      );
-    }
-
-    const {
-      data: { publicUrl: inputPublicUrl },
-    } = adminSupabase.storage.from(inputBucket).getPublicUrl(inputPath);
-
-    if (!inputPublicUrl) {
-      throw new Error("Impossible de générer l'URL publique de l'image source.");
-    }
-
-    const projectPayload: ProjectInsert = {
-      id: projectIdCandidate,
+    const registrationPayload: RegistrationInsert = {
       user_id: session.user.id,
-      input_image_url: inputPublicUrl,
-      prompt,
+      event_id: eventId,
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      phone,
+      amount: amountNumber,
+      currency: DEFAULT_CURRENCY,
       status: "pending",
-      payment_status: "pending",
-      payment_amount: PRICE_AMOUNT,
     };
 
-    const { data: project, error: insertError } = await adminSupabase
-      .from("projects")
-      .insert([projectPayload])
+    const { data: registration, error: insertError } = await adminSupabase
+      .from("registrations")
+      .insert([registrationPayload])
       .select()
-      .single<ProjectRow>();
+      .single<RegistrationRow>();
 
-    if (insertError) {
-      throw new Error(`Échec de la création du projet: ${insertError.message}`);
+    if (insertError || !registration) {
+      throw new Error(insertError?.message ?? "Impossible d'enregistrer la participation.");
     }
 
-    createdProjectId = project.id;
+    createdRegistrationId = registration.id;
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const eventDetails = MAIN_EVENT;
 
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_intent_data: {
         metadata: {
-          project_id: project.id,
+          registration_id: registration.id,
+          event_id: registration.event_id,
         },
       },
       line_items: [
         {
           price_data: {
-            currency: "eur",
+            currency: DEFAULT_CURRENCY.toLowerCase(),
             product_data: {
-              name: "Génération d'image IA",
+              name: `Participation — ${eventDetails.title}`,
+              description: `${eventDetails.venue} · ${eventDetails.date}`,
             },
-            unit_amount: PRICE_UNIT_AMOUNT,
+            unit_amount: amountInCents,
           },
           quantity: 1,
         },
       ],
       metadata: {
-        project_id: project.id,
+        registration_id: registration.id,
+        event_id: registration.event_id,
+        participant_email: registration.email,
       },
-      customer_email: session.user.email ?? undefined,
-      success_url: `${originUrl}/dashboard`,
-      cancel_url: `${originUrl}/dashboard`,
+      customer_email: registration.email,
+      success_url: `${originUrl}/dashboard?statut=confirmation&inscription=${encodeURIComponent(registration.id)}`,
+      cancel_url: `${originUrl}/dashboard?statut=annule&inscription=${encodeURIComponent(registration.id)}`,
     });
 
     if (!checkoutSession.url) {
@@ -177,42 +167,32 @@ export async function POST(request: Request) {
     }
 
     const { error: updateError } = await adminSupabase
-      .from("projects")
-      .update({
-        stripe_checkout_session_id: checkoutSession.id,
-      })
-      .eq("id", project.id);
+      .from("registrations")
+      .update({ stripe_checkout_session_id: checkoutSession.id })
+      .eq("id", registration.id);
 
     if (updateError) {
-      throw new Error(`Échec de la mise à jour du projet avec la session Stripe: ${updateError.message}`);
+      throw new Error(
+        `Échec de la mise à jour du dossier participant avec la session Stripe: ${updateError.message}`
+      );
     }
 
     return NextResponse.json({
       sessionId: checkoutSession.id,
       sessionUrl: checkoutSession.url,
-      project,
+      registration,
     });
   } catch (error) {
     console.error("[create-checkout-session] Erreur:", error);
 
-    if (adminSupabase && uploadedInputPath && inputBucketName) {
-      const { error: removeError } = await adminSupabase.storage
-        .from(inputBucketName)
-        .remove([uploadedInputPath]);
-
-      if (removeError) {
-        console.error("[create-checkout-session] Échec de la suppression de l'image source:", removeError.message);
-      }
-    }
-
-    if (adminSupabase && createdProjectId) {
+    if (adminSupabase && createdRegistrationId) {
       const { error: deleteError } = await adminSupabase
-        .from("projects")
+        .from("registrations")
         .delete()
-        .eq("id", createdProjectId);
+        .eq("id", createdRegistrationId);
 
       if (deleteError) {
-        console.error("[create-checkout-session] Échec de la suppression du projet:", deleteError.message);
+        console.error("[create-checkout-session] Échec du nettoyage du dossier participant:", deleteError.message);
       }
     }
 

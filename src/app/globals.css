@@ -3,24 +3,45 @@
 @tailwind utilities;
 
 :root {
-  --background: #f5ecd9;
-  --foreground: #2c2a29;
-  --accent: #c9773d;
-  --accent-strong: #8f4b1c;
-  --muted: #6c5a4c;
-  --muted-light: #b99e87;
+  --background: 35 65% 97%;
+  --foreground: 20 24% 18%;
+  --card: 34 70% 98%;
+  --card-foreground: 20 24% 18%;
+  --popover: 34 70% 98%;
+  --popover-foreground: 20 24% 18%;
+  --primary: 357 62% 32%;
+  --primary-foreground: 35 65% 97%;
+  --secondary: 27 42% 92%;
+  --secondary-foreground: 20 24% 18%;
+  --muted: 28 40% 80%;
+  --muted-foreground: 25 20% 32%;
+  --accent: 357 62% 32%;
+  --accent-foreground: 35 65% 97%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 20 12% 78%;
+  --input: 20 12% 78%;
+  --ring: 357 62% 32%;
+  --radius: 0.75rem;
+}
+
+:root {
+  --background-hex: #fdf8ee;
+  --foreground-hex: #3c2415;
+  --accent-hex: #8a2b26;
+  --muted-light-hex: #f4e6d9;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--background-hex);
+  --color-foreground: var(--foreground-hex);
   --font-sans: var(--font-sans-primary);
   --font-mono: var(--font-display);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
   font-family: var(--font-sans-primary), "Inter", system-ui, sans-serif;
   line-height: 1.7;
 }
@@ -30,7 +51,8 @@ h2,
 h3,
 h4 {
   font-family: var(--font-display), "Playfair Display", serif;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
+  color: hsl(var(--foreground));
 }
 
 @keyframes slow-pan {

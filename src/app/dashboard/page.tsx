@@ -5,7 +5,7 @@ import type { Database } from "@/types/supabase";
 import { DashboardClient } from "./_components/DashboardClient";
 
 export const metadata: Metadata = {
-  title: "Tableau de bord — Concerto Final",
+  title: "Espace abonné — Concerto",
 };
 
 export default async function DashboardPage() {
@@ -20,16 +20,16 @@ export default async function DashboardPage() {
 
   const adminSupabase = createSupabaseServiceRoleClient();
 
-  const { data: projects, error } = await adminSupabase
-    .from("projects")
+  const { data: registrations, error } = await adminSupabase
+    .from("registrations")
     .select("*")
     .eq("user_id", session.user.id)
     .order("created_at", { ascending: false })
-    .returns<Database["public"]["Tables"]["projects"]["Row"][]>();
+    .returns<Database["public"]["Tables"]["registrations"]["Row"][]>();
 
   if (error) {
-    console.error("Impossible de charger les projets:", error.message);
+    console.error("Impossible de charger les inscriptions:", error.message);
   }
 
-  return <DashboardClient initialProjects={projects ?? []} />;
+  return <DashboardClient initialRegistrations={registrations ?? []} />;
 }

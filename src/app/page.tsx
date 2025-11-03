@@ -1,283 +1,162 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import Image from "next/image";
+import { useMemo } from "react";
 import { useAuth } from "@/components/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CONCERT_EVENTS, MAIN_EVENT } from "@/lib/constants";
 
-const programmeHighlights = [
-  {
-    title: "Immersion scénique",
-    description:
-      "Des portraits transformés en musiciens virtuoses au cœur d'un orchestre symphonique.",
-  },
-  {
-    title: "Expérience personnalisée",
-    description:
-      "Chaque photo partagée reçoit une interprétation fidèle à ta présence et ton style.",
-  },
-  {
-    title: "Partage instantané",
-    description:
-      "Retrouve tes créations dans ton tableau de bord et diffuse-les sur les réseaux.",
-  },
-];
-
-const creationSteps = [
-  {
-    title: "1. Crée ton compte",
-    detail: "Inscris-toi pour accéder à l'espace sécurisé et à la galerie personnelle.",
-  },
-  {
-    title: "2. Téléverse ton portrait",
-    detail: "Depuis le tableau de bord, importe une photo en haute résolution.",
-  },
-  {
-    title: "3. Reçois ta mise en scène",
-    detail: "L'IA harmonise ton portrait avec l'univers orchestral de Concerto Final.",
-  },
-];
+const FEATURED_MEDIA_DIMENSIONS = {
+  width: 2192,
+  height: 1566,
+};
 
 export default function Home() {
   const { user } = useAuth();
 
-  const [contactName, setContactName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [contactMessage, setContactMessage] = useState("");
-  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
-  const [contactStatus, setContactStatus] = useState<string | null>(null);
-  const [contactError, setContactError] = useState<string | null>(null);
+  const instructionMessage = user
+    ? "Retrouve toutes tes réservations depuis l’espace abonné accessible en haut à droite."
+    : "Pour réserver ta place, connecte-toi ou inscris-toi depuis le menu en haut à droite.";
 
-  const primaryCtaHref = user ? "/dashboard" : "/signup";
-  const primaryCtaLabel = user ? "Accéder au tableau de bord" : "Commencer l'expérience";
-  const secondaryCta = user ? "/dashboard" : "/login";
-
-  const handleContactSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!contactName.trim() || !contactEmail.trim()) {
-      setContactError("Nom et email sont requis.");
-      setContactStatus(null);
-      return;
-    }
-
-    setIsSubmittingContact(true);
-    setContactStatus(null);
-    setContactError(null);
-
-    try {
-      const response = await fetch("/api/contact", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          nomPrenom: contactName.trim(),
-          email: contactEmail.trim(),
-          message: contactMessage.trim() || undefined,
-        }),
-      });
-
-      const data = (await response.json().catch(() => null)) as
-        | { success?: boolean; error?: string }
-        | null;
-
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.error || "Impossible d'envoyer ton message.");
-      }
-
-      setContactStatus("Merci ! Nous revenons vers toi très vite.");
-      setContactName("");
-      setContactEmail("");
-      setContactMessage("");
-    } catch (error) {
-      console.error(error);
-      setContactError(
-        error instanceof Error ? error.message : "Une erreur inattendue est survenue."
-      );
-      setContactStatus(null);
-    } finally {
-      setIsSubmittingContact(false);
-    }
-  };
+  const currentEvent = useMemo(() => CONCERT_EVENTS[0] ?? MAIN_EVENT, []);
 
   return (
-    <main className="relative min-h-screen text-white">
-      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: "url(/Piano%20concert.jpg)" }}
-        />
-        <div className="absolute inset-0 bg-black/65" />
-      </div>
-
+    <main className="min-h-screen bg-gradient-to-b from-[#fefaf3] via-[#f7ecdd] to-[#f3dcc8] text-neutral-800">
       <section
-        id="accueil"
-        className="mx-auto flex max-w-6xl flex-col items-center gap-10 px-6 pb-24 pt-20 text-center md:pt-24"
+        id="concert"
+        className="relative overflow-hidden border-b border-[#eadacf]"
       >
-        <span className="text-xs uppercase tracking-[0.4em] text-white/70">
-          18 décembre · Temple de l&apos;Étoile · Paris
-        </span>
-        <h1 className="font-display text-4xl font-semibold leading-tight text-white md:text-5xl">
-          Partage ton portrait et rejoins l&apos;orchestre du Concerto Final
-        </h1>
-        <p className="max-w-3xl text-base text-white/75 md:text-lg">
-          Inscris-toi pour transformer ton image en musicien de scène, vivre l&apos;ambiance
-          grandiose du concert et conserver un souvenir unique de la soirée.
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-4 text-sm uppercase tracking-[0.3em]">
-          <Link
-            href={primaryCtaHref}
-            className="rounded-full bg-[var(--accent)] px-8 py-3 text-black transition hover:bg-white"
-          >
-            {primaryCtaLabel}
-          </Link>
-          <Link
-            href={secondaryCta}
-            className="rounded-full border border-white/25 px-8 py-3 text-white transition hover:bg-white/10"
-          >
-            {user ? "Voir mes créations" : "Déjà inscrit ? Connexion"}
-          </Link>
-        </div>
-      </section>
-
-      <section
-        id="informations"
-        className="bg-black/40 py-20"
-      >
-        <div className="mx-auto grid max-w-6xl gap-10 px-6 md:grid-cols-3">
-          {programmeHighlights.map((item) => (
-            <article
-              key={item.title}
-              className="rounded-2xl border border-white/10 bg-white/10 p-6 text-left backdrop-blur transition hover:border-[var(--accent)]"
-            >
-              <h2 className="mb-3 text-lg font-semibold uppercase tracking-[0.3em] text-white">
-                {item.title}
-              </h2>
-              <p className="text-sm text-white/70">{item.description}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section
-        id="generation"
-        className="mx-auto flex max-w-5xl flex-col gap-12 px-6 py-20"
-      >
-        <div className="space-y-4 text-center">
-          <h2 className="text-3xl font-semibold uppercase tracking-[0.35em] text-white">
-            Ton parcours créatif
-          </h2>
-          <p className="mx-auto max-w-3xl text-base text-white/70">
-            L&apos;accès à la génération se fait depuis ton tableau de bord personnel. Suis les
-            étapes ci-dessous et rejoins-nous sur scène en quelques minutes.
-          </p>
+        <div className="absolute inset-0 -z-10">
+          <div className="absolute inset-0 bg-[url('/images/concert-evening.jpg')] bg-cover bg-center opacity-40" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#fefaf3] via-[#fefaf3]/98 to-white/70" />
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
-          {creationSteps.map((step) => (
-            <div
-              key={step.title}
-              className="rounded-2xl border border-white/10 bg-black/60 p-6 text-sm text-white/80"
-            >
-              <h3 className="text-lg font-semibold uppercase tracking-[0.3em] text-white">
-                {step.title}
-              </h3>
-              <p className="mt-3 text-white/70">{step.detail}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-4 text-sm uppercase tracking-[0.3em]">
-          <Link
-            href={primaryCtaHref}
-            className="rounded-full bg-[var(--accent)] px-8 py-3 text-black transition hover:bg-white"
-          >
-            {primaryCtaLabel}
-          </Link>
-          <Link
-            href="/login"
-            className="rounded-full border border-white/25 px-8 py-3 text-white transition hover:bg-white/10"
-          >
-            Se connecter
-          </Link>
-        </div>
-      </section>
-
-      <section
-        id="reservation"
-        className="bg-black/55 py-20"
-      >
-        <div className="mx-auto grid max-w-5xl gap-12 px-6 md:grid-cols-[1.2fr_1fr]">
-          <div>
-            <h2 className="text-2xl font-semibold uppercase tracking-[0.3em] text-white">
-              Une question ? Écris-nous
-            </h2>
-            <p className="mt-4 text-sm text-white/70">
-              Pour toute demande logistique ou artistique, l&apos;équipe Concerto Final te répond
-              rapidement.
+        <div className="mx-auto flex max-w-6xl flex-col gap-12 px-6 pb-24 pt-28 md:flex-row md:items-center">
+          <div className="flex-1 space-y-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[#7a1c1a]">
+              {currentEvent.subtitle}
             </p>
+            <h1 className="font-display text-4xl font-semibold leading-tight text-[#401f18] md:text-5xl">
+              {currentEvent.title}
+            </h1>
+            <p className="max-w-lg text-sm font-medium uppercase tracking-[0.28em] text-[#7a1c1a]">
+              {instructionMessage}
+            </p>
+            <div className="flex flex-wrap gap-6 text-xs uppercase tracking-[0.26em] text-neutral-500">
+              <span>{currentEvent.date}</span>
+              <span className="hidden h-1 w-1 rounded-full bg-[#7a1c1a]/40 sm:inline-flex" />
+              <span>{currentEvent.time}</span>
+              <span className="hidden h-1 w-1 rounded-full bg-[#7a1c1a]/40 sm:inline-flex" />
+              <span>{currentEvent.venue}</span>
+            </div>
           </div>
 
-          <form
-            onSubmit={handleContactSubmit}
-            className="space-y-4 rounded-2xl border border-white/10 bg-white/10 p-6 backdrop-blur"
-          >
-            <div className="space-y-2">
-              <label className="block text-xs uppercase tracking-[0.3em] text-white/60">
-                Nom / Prénom
-              </label>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-[var(--accent)] focus:bg-black/60"
-                value={contactName}
-                onChange={(event) => setContactName(event.target.value)}
-                disabled={isSubmittingContact}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-xs uppercase tracking-[0.3em] text-white/60">
-                Email
-              </label>
-              <input
-                type="email"
-                className="w-full rounded-lg border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-[var(--accent)] focus:bg-black/60"
-                value={contactEmail}
-                onChange={(event) => setContactEmail(event.target.value)}
-                disabled={isSubmittingContact}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-xs uppercase tracking-[0.3em] text-white/60">
-                Message
-              </label>
-              <textarea
-                className="h-32 w-full resize-none rounded-lg border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-[var(--accent)] focus:bg-black/60"
-                value={contactMessage}
-                onChange={(event) => setContactMessage(event.target.value)}
-                disabled={isSubmittingContact}
-              />
-            </div>
-
-            {contactStatus ? (
-              <p className="text-sm text-emerald-400">{contactStatus}</p>
-            ) : null}
-            {contactError ? <p className="text-sm text-red-400">{contactError}</p> : null}
-
-            <button
-              type="submit"
-              className="w-full rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isSubmittingContact}
-            >
-              {isSubmittingContact ? "Envoi en cours…" : "Envoyer"}
-            </button>
-          </form>
+          <div className="relative overflow-hidden rounded-[32px] border border-white/60 shadow-[0_35px_60px_rgba(122,28,26,0.18)] aspect-[2192/1566] w-full md:max-w-[680px] md:ml-auto">
+            <Image
+              src={currentEvent.heroImage}
+              alt={`Ambiance ${currentEvent.title}`}
+              width={FEATURED_MEDIA_DIMENSIONS.width}
+              height={FEATURED_MEDIA_DIMENSIONS.height}
+              priority
+              className="h-full w-full object-cover"
+            />
+          </div>
         </div>
       </section>
 
-      <footer className="bg-black/70 py-8 text-center text-xs uppercase tracking-[0.3em] text-white/40">
-        Concerto Final © {new Date().getFullYear()} — Une expérience orchestrale augmentée
+      <section
+        id="apropos"
+        className="mx-auto max-w-6xl px-6 py-20"
+      >
+        <div className="grid gap-10 md:grid-cols-[1.05fr_0.95fr] md:items-center">
+          <div className="space-y-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-neutral-500">
+              À propos de nous
+            </p>
+            <h2 className="font-display text-3xl text-[#401f18]">
+              Venez nous écouter pour aider l&apos;association{" "}
+              <a
+                href="https://louiseetrosalie.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#7a1c1a] underline-offset-4 hover:underline"
+              >
+                Louise et Rosalie
+              </a>
+            </h2>
+            <p className="text-sm leading-relaxed text-neutral-600">
+              Rencontre l&apos;équipe Concerto :
+            </p>
+            <ul className="list-disc space-y-2 pl-6 text-sm leading-relaxed text-neutral-600">
+              <li>Martin au chant</li>
+              <li>Hippolyte au cor de chasse</li>
+              <li>Douce au chant</li>
+              <li>Aymeric au piano</li>
+              <li>Pacôme à la contrebasse</li>
+              <li>Jean-Baptiste au piano</li>
+              <li>Coralie au piano</li>
+            </ul>
+          </div>
+          <div className="overflow-hidden rounded-[28px] border border-[#eadacf] shadow-[0_30px_55px_rgba(122,28,26,0.15)] aspect-[2192/1566] w-full md:max-w-[680px] md:ml-auto">
+            <Image
+              src="/images/montage-concert.png"
+              alt="Moments partagés lors des concerts Concerto"
+              width={FEATURED_MEDIA_DIMENSIONS.width}
+              height={FEATURED_MEDIA_DIMENSIONS.height}
+              className="h-full w-full object-cover"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="infos"
+        className="border-y border-[#eadacf] bg-[#fdf3e3]"
+      >
+        <div className="mx-auto grid max-w-6xl gap-10 px-6 py-20 md:grid-cols-[1.1fr_0.9fr] md:items-center">
+          <div className="space-y-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-[#7a1c1a]">
+              Infos pratiques
+            </p>
+            <h2 className="font-display text-3xl text-[#401f18]">Temple de l&apos;Étoile</h2>
+            <p className="text-sm leading-relaxed text-neutral-700">
+              Situé aux portes de l&apos;Arc de Triomphe, le Temple de l&apos;Étoile offre une acoustique généreuse
+              et un décor chaleureux. Notre équipe t&apos;accueille dès 19h15 sur place.
+            </p>
+            <Card className="max-w-lg border-[#eadacf] bg-white/90 shadow-md shadow-[#7a1c1a]/10">
+              <CardHeader className="space-y-1">
+                <CardTitle className="text-lg">Adresse</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-neutral-600">
+                <p>{currentEvent.address}</p>
+                <a
+                  className="mt-4 inline-flex text-sm font-semibold text-[#7a1c1a] underline-offset-4 hover:underline"
+                  href={currentEvent.googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Ouvrir dans Google Maps →
+                </a>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="overflow-hidden rounded-[24px] border border-[#eadacf] shadow-xl shadow-[#7a1c1a]/12 aspect-[2192/1566] w-full md:max-w-[680px] md:ml-auto">
+            <iframe
+              title="Temple de l'Étoile sur Google Maps"
+              src="https://maps.google.com/maps?q=54-56%20Av.%20de%20la%20Grande%20Arm%C3%A9e%2C%2075017%20Paris&t=&z=15&ie=UTF8&iwloc=&output=embed"
+              width={FEATURED_MEDIA_DIMENSIONS.width}
+              height={FEATURED_MEDIA_DIMENSIONS.height}
+              className="h-full w-full"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
+        </div>
+      </section>
+
+      <footer className="bg-[#f6e4d4] py-10 text-center text-xs uppercase tracking-[0.32em] text-neutral-500">
+        Concerto © {new Date().getFullYear()} · Saison Sous la voûte de l&apos;Étoile
       </footer>
     </main>
   );

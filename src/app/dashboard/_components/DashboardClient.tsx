@@ -1,384 +1,576 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
+import { X } from "lucide-react";
 import type { Database } from "@/types/supabase";
 import { useAuth } from "@/components/AuthContext";
-import { DEFAULT_PROMPT } from "@/lib/constants";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { DEFAULT_CURRENCY, MAIN_EVENT } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
-type Project = Database["public"]["Tables"]["projects"]["Row"];
+type Registration = Database["public"]["Tables"]["registrations"]["Row"];
 
 interface DashboardClientProps {
-  initialProjects: Project[];
+  initialRegistrations: Registration[];
 }
 
-export function DashboardClient({ initialProjects }: DashboardClientProps) {
-  const router = useRouter();
-  const { user } = useAuth();
+function formatAmount(value: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return `${value.toFixed(2)} ${currency}`;
+  }
+}
 
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+export function DashboardClient({ initialRegistrations }: DashboardClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { user, supabase } = useAuth();
+
+  const [registrations, setRegistrations] = useState<Registration[]>(initialRegistrations);
+  const [highlightedRegistration, setHighlightedRegistration] = useState<string | null>(null);
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [amount, setAmount] = useState("25");
+
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [isDeleting, setIsDeleting] = useState<Record<string, boolean>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showStatusToast, setShowStatusToast] = useState(false);
+  const [confirmedRegistrationId, setConfirmedRegistrationId] = useState<string | null>(null);
+  const [ticketEmailSentId, setTicketEmailSentId] = useState<string | null>(null);
 
-  function formatPaymentStatus(status?: string | null) {
-    if (!status) {
-      return "inconnu";
-    }
-    switch (status) {
-      case "paid":
-        return "payé";
-      case "pending":
-        return "en attente";
-      default:
-        return status;
-    }
-  }
+  useEffect(() => {
+    setRegistrations(initialRegistrations);
+  }, [initialRegistrations]);
 
-  function formatProjectStatus(status?: string | null) {
-    if (!status) {
-      return "en attente";
+  useEffect(() => {
+    if (!user) {
+      return;
     }
-    switch (status) {
-      case "completed":
-        return "terminée";
-      case "processing":
-        return "en cours";
-      case "pending":
-        return "en attente";
-      default:
-        return status;
-    }
-  }
 
-  const greeting = useMemo(() => {
-    const email = user?.email ?? "Artiste";
-    return email.split("@")[0] ?? email;
+    let isMounted = true;
+
+    async function refreshRegistrations() {
+      try {
+        const { data, error } = await supabase
+          .from("registrations")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("[dashboard] Impossible de rafraîchir les inscriptions:", error.message);
+          return;
+        }
+
+        if (isMounted && data) {
+          setRegistrations(data as Registration[]);
+        }
+      } catch (error) {
+        console.error("[dashboard] Erreur inattendue lors du rafraîchissement des inscriptions:", error);
+      }
+    }
+
+    refreshRegistrations();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [supabase, user]);
+
+  useEffect(() => {
+    if (user?.email) {
+      setEmail(user.email);
+    }
   }, [user?.email]);
 
   useEffect(() => {
-    if (!selectedFile) {
-      setPreviewUrl(null);
-      return;
+    const statut = searchParams.get("statut");
+    const registrationId = searchParams.get("inscription");
+
+    if (statut === "confirmation") {
+      setStatusMessage("Merci ! Ta participation est confirmée. Ton QR code est envoyé par email.");
+      if (registrationId) {
+        setConfirmedRegistrationId(registrationId);
+      }
+      setErrorMessage(null);
+    } else if (statut === "annule") {
+      setErrorMessage("Le paiement a été annulé. Tu peux réessayer quand tu veux.");
+      setStatusMessage(null);
+      setConfirmedRegistrationId(null);
     }
 
-    const url = URL.createObjectURL(selectedFile);
-    setPreviewUrl(url);
-
-    return () => URL.revokeObjectURL(url);
-  }, [selectedFile]);
+    if (statut) {
+      router.replace(pathname, { scroll: false });
+    }
+  }, [pathname, router, searchParams]);
 
   useEffect(() => {
-    if (!isGenerating) {
-      setProgress(0);
+    const registrationId = searchParams.get("inscription");
+    if (registrationId) {
+      setHighlightedRegistration(registrationId);
+    }
+  }, [searchParams]);
+
+  const paidRegistrations = useMemo(
+    () =>
+      registrations.filter(
+        (registration) => registration.status === "paid" || registration.id === confirmedRegistrationId
+      ),
+    [registrations, confirmedRegistrationId]
+  );
+
+  useEffect(() => {
+    if (!statusMessage) {
+      setShowStatusToast(false);
       return;
     }
 
-    const interval = window.setInterval(() => {
-      setProgress((previous) => {
-        if (previous >= 90) {
-          return previous;
-        }
+    setShowStatusToast(true);
+    const timeoutId = window.setTimeout(() => {
+      setShowStatusToast(false);
+      setStatusMessage(null);
+    }, 5000);
 
-        const next = previous + Math.random() * 12 + 4;
-        return Math.min(90, Math.round(next));
-      });
-    }, 500);
+    return () => window.clearTimeout(timeoutId);
+  }, [statusMessage]);
 
-    return () => window.clearInterval(interval);
-  }, [isGenerating]);
+  const handleDismissStatusToast = () => {
+    setShowStatusToast(false);
+    setStatusMessage(null);
+  };
 
-  async function handleCheckout(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setErrorMessage(null);
+    setStatusMessage(null);
 
-    if (!selectedFile) {
-      setErrorMessage("Merci de choisir un portrait avant de lancer la génération.");
+    const parsedAmount = Number.parseFloat(amount.replace(",", "."));
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setErrorMessage("Merci de renseigner un montant supérieur à 0 €.");
       return;
     }
 
-    setIsCreatingCheckout(true);
-    setStatusMessage("Création de la session de paiement…");
-    setErrorMessage(null);
-    let createdProject: Project | null = null;
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !phone.trim()) {
+      setErrorMessage("Tous les champs sont obligatoires pour valider ta participation.");
+      return;
+    }
 
-    const projectId = crypto.randomUUID();
-    const formData = new FormData();
-    formData.append("projectId", projectId);
-    formData.append("image", selectedFile);
-    formData.append("prompt", DEFAULT_PROMPT);
-
+    setIsSubmitting(true);
     try {
       const response = await fetch("/api/create-checkout-session", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim(),
+          amount: parsedAmount,
+          eventId: MAIN_EVENT.id,
+        }),
       });
 
       const payload = (await response.json().catch(() => ({}))) as {
-        sessionId?: string;
         sessionUrl?: string;
-        project?: Project;
         error?: string;
+        registration?: Registration;
       };
 
       if (!response.ok || !payload.sessionUrl) {
-        throw new Error(payload.error ?? "Impossible de créer la session de paiement.");
+        throw new Error(payload.error ?? "Impossible de créer la session de paiement Stripe.");
       }
 
-      if (payload.project) {
-        createdProject = payload.project as Project;
-        setProjects((previous) => [payload.project as Project, ...previous]);
+      if (payload.registration) {
+        setRegistrations((previous) => [payload.registration as Registration, ...previous]);
       }
 
-      setStatusMessage("Redirection vers la page de paiement…");
       window.location.href = payload.sessionUrl;
     } catch (error) {
       console.error(error);
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Erreur inattendue lors de la préparation du paiement."
+        error instanceof Error ? error.message : "Une erreur inattendue est survenue."
       );
-      setStatusMessage(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
-      if (createdProject) {
-        setProjects((previous) => previous.filter((project) => project.id !== createdProject?.id));
-        await fetch(`/api/projects/${createdProject.id}`, { method: "DELETE" }).catch(() => {
-          // Ignorer l'erreur de nettoyage côté client.
+  useEffect(() => {
+    if (!user || !confirmedRegistrationId || ticketEmailSentId === confirmedRegistrationId) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function refreshUserRegistrations() {
+      const { data, error } = await supabase
+        .from("registrations")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setRegistrations(data as Registration[]);
+      } else if (error) {
+        console.error("[dashboard] Rafraîchissement des inscriptions impossible:", error.message);
+      }
+    }
+
+    async function sendTicketAndRefresh() {
+      try {
+        const response = await fetch(`/api/registrations/${confirmedRegistrationId}/send-ticket`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
         });
+
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          sent?: boolean;
+          qrReady?: boolean;
+        };
+
+        if (!isCancelled) {
+          if (response.ok) {
+            setTicketEmailSentId(confirmedRegistrationId);
+            if (payload.sent) {
+              setStatusMessage("Ton billet est confirmé. Un email vient de t'être envoyé.");
+            } else {
+              setStatusMessage("Ton billet est prêt. Télécharge-le ou récupère-le depuis ton espace.");
+            }
+          } else {
+            console.error("[dashboard] Envoi du billet impossible:", payload.error);
+            setErrorMessage(
+              payload.error ??
+                "Envoi automatique indisponible pour le moment. Télécharge ton billet ci-dessous."
+            );
+          }
+
+          await refreshUserRegistrations();
+        }
+      } catch (error) {
+        console.error("[dashboard] Appel send-ticket impossible:", error);
       }
-    } finally {
-      setIsCreatingCheckout(false);
     }
-  }
 
-  async function handleDelete(projectId: string) {
-    setIsDeleting((previous) => ({ ...previous, [projectId]: true }));
-    setErrorMessage(null);
+    (async () => {
+      await refreshUserRegistrations();
+      await sendTicketAndRefresh();
+    })();
 
-    try {
-      const response = await fetch(`/api/projects/${projectId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const { error } = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(error ?? "Suppression impossible.");
-      }
-
-      setProjects((previous) => previous.filter((project) => project.id !== projectId));
-    } catch (error) {
-      console.error(error);
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Erreur inattendue lors de la suppression du projet."
-      );
-    } finally {
-      setIsDeleting((previous) => ({ ...previous, [projectId]: false }));
-    }
-  }
-
-  async function handleLaunchGeneration(projectId: string) {
-    setIsGenerating(true);
-    setActiveProjectId(projectId);
-    setStatusMessage("Génération en cours, cela peut prendre quelques secondes…");
-    setErrorMessage(null);
-    setProgress(10);
-
-    try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId }),
-      });
-
-      const payload = (await response.json().catch(() => ({}))) as {
-        imageUrl?: string;
-        project?: Project;
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "La génération a échoué.");
-      }
-
-      if (payload.project) {
-        setProjects((previous) =>
-          previous.map((project) => (project.id === projectId ? (payload.project as Project) : project))
-        );
-      } else {
-        router.refresh();
-      }
-
-      setStatusMessage("Image générée avec succès !");
-      setProgress(100);
-    } catch (error) {
-      console.error(error);
-      setErrorMessage(
-        error instanceof Error ? error.message : "Erreur inattendue lors de la génération."
-      );
-      setStatusMessage(null);
-      setProgress(0);
-    } finally {
-      setIsGenerating(false);
-      setActiveProjectId(null);
-    }
-  }
+    return () => {
+      isCancelled = true;
+    };
+  }, [confirmedRegistrationId, ticketEmailSentId, supabase, user]);
 
   return (
-    <main className="relative min-h-screen bg-gradient-to-br from-black via-[#0f0615] to-[#180b25] pb-24">
-      <div className="absolute inset-0 -z-10 bg-[url('/Piano%20concert.jpg')] bg-cover bg-center opacity-10" />
-      <section className="mx-auto flex max-w-5xl flex-col gap-10 px-6 pt-16 text-white">
-        <div className="space-y-3">
-          <h1 className="text-3xl font-semibold tracking-[0.2em] uppercase">
-            Bienvenue, {greeting}
-          </h1>
-          <p className="text-base text-white/70">
-            Transforme ton portrait en musicien de scène. Téléverse un fichier PNG, JPG ou WEBP
-            (max 10 Mo).
-          </p>
-        </div>
-
-        <form
-          onSubmit={handleCheckout}
-          className="grid gap-6 rounded-2xl border border-white/10 bg-black/60 p-6 shadow-xl backdrop-blur md:grid-cols-[1fr_280px]"
-        >
-          <div className="space-y-4">
-            <label className="block text-xs uppercase tracking-[0.3em] text-white/60">
-              Portrait
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
-                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                className="mt-3 w-full rounded-lg border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none transition focus:border-[var(--accent)] focus:bg-black/50"
-                disabled={isGenerating || isCreatingCheckout}
+    <>
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 py-16">
+      <section className="grid gap-10 md:grid-cols-[1fr_0.95fr] md:items-start">
+        <Card className="border-[#eadacf] bg-white/95 shadow-xl shadow-[#7a1c1a]/10">
+          <CardHeader className="space-y-4">
+            <span className="text-xs font-semibold uppercase tracking-[0.32em] text-[#7a1c1a]">
+              Concert
+            </span>
+            <CardTitle className="text-3xl leading-tight text-[#401f18]">{MAIN_EVENT.title}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="overflow-hidden rounded-[24px] border border-[#eadacf]/70">
+              <Image
+                src={MAIN_EVENT.heroImage}
+                alt={MAIN_EVENT.title}
+                width={880}
+                height={600}
+                className="h-full w-full object-cover"
+                priority
               />
-            </label>
-
-            <p className="text-xs text-white/60">
-              Ta photo reste privée. Tu peux la supprimer quand tu veux depuis ta galerie.
-            </p>
-
-            {previewUrl ? (
-              <div className="overflow-hidden rounded-xl border border-white/10">
-                <img
-                  src={previewUrl}
-                  alt="Prévisualisation du portrait"
-                  className="max-h-64 w-full object-cover"
-                />
-              </div>
-            ) : null}
-          </div>
-
-          <div className="flex flex-col justify-between gap-4 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
-            <p>
-              Prompt utilisé :
-              <span className="mt-2 block font-medium text-white/90">{DEFAULT_PROMPT}</span>
-            </p>
-
-            <button
-              type="submit"
-              className="rounded-lg bg-[var(--accent)] px-4 py-3 text-center text-sm font-semibold uppercase tracking-[0.3em] text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isCreatingCheckout || !selectedFile}
-            >
-              {isCreatingCheckout ? "Redirection…" : "Générer (2€)"}
-            </button>
-
-            <div className="flex flex-col gap-2 text-xs uppercase tracking-[0.2em] text-white/60">
-              <span>Prix : 2€ par génération via Stripe Checkout</span>
-              {isGenerating ? <span>Progression : {progress}%</span> : null}
-              {statusMessage ? <span className="text-emerald-400">{statusMessage}</span> : null}
-              {errorMessage ? <span className="text-red-400">{errorMessage}</span> : null}
             </div>
-          </div>
-        </form>
+            <div className="grid gap-4 text-sm text-neutral-600 md:grid-cols-2">
+              <div>
+                <p className="font-semibold text-[#7a1c1a] uppercase tracking-[0.22em] text-xs mb-1">
+                  Date
+                </p>
+                <p>{MAIN_EVENT.date}</p>
+                <p>{MAIN_EVENT.time}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-[#7a1c1a] uppercase tracking-[0.22em] text-xs mb-1">
+                  Lieu
+                </p>
+                <p>{MAIN_EVENT.venue}</p>
+                <p>{MAIN_EVENT.address}</p>
+              </div>
+            </div>
+            <Button asChild variant="ghost" className="px-0 text-[#7a1c1a] hover:bg-transparent">
+              <a href={MAIN_EVENT.googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                Voir l&apos;itinéraire sur Google Maps →
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-[#eadacf] bg-white/95 shadow-xl shadow-[#7a1c1a]/10">
+          <CardHeader className="space-y-3">
+            <span className="text-xs font-semibold uppercase tracking-[0.32em] text-neutral-500">
+              Réserver ma place
+            </span>
+            <CardTitle className="text-2xl text-[#401f18]">
+              Choisis ton montant de participation
+            </CardTitle>
+            <p className="text-sm text-neutral-600">
+              Les contributions sont libres et reversées intégralement pour rémunérer les artistes et
+              l&apos;équipe de production.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">Prénom</Label>
+                  <Input
+                    id="firstName"
+                    value={firstName}
+                    onChange={(event) => setFirstName(event.target.value)}
+                    placeholder="Camille"
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Nom</Label>
+                  <Input
+                    id="lastName"
+                    value={lastName}
+                    onChange={(event) => setLastName(event.target.value)}
+                    placeholder="Dupont"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="ton.email@email.com"
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Téléphone</Label>
+                  <Input
+                    id="phone"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="+33 6 12 34 56 78"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="amount">Montant de participation (€)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  min={1}
+                  step="0.5"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                  disabled={isSubmitting}
+                />
+                <p className="text-xs text-neutral-500">
+                  Le paiement est sécurisé par Stripe. Le QR code s&apos;affiche dans ta boîte mail après validation.
+                </p>
+              </div>
+
+              {errorMessage ? <p className="text-sm text-red-500">{errorMessage}</p> : null}
+
+              <Button type="submit" disabled={isSubmitting} className="w-full">
+                {isSubmitting ? "Préparation du paiement…" : "Passer au paiement Stripe"}
+              </Button>
+            </form>
+
+            {paidRegistrations.length > 0 ? (
+              <p className="mt-6 rounded-xl bg-[#f6e4d4] px-4 py-3 text-sm text-[#7a1c1a]">
+                Merci de soutenir la scène Concerto ! Tu peux retrouver ton QR code ci-dessous à tout moment.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
       </section>
 
-      <section className="mx-auto mt-12 max-w-5xl px-6 text-white">
+      <section>
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-2xl font-semibold uppercase tracking-[0.25em]">Mes projets</h2>
-          <button
-            type="button"
-            className="text-xs uppercase tracking-[0.3em] text-white/60 underline transition hover:text-white"
-            onClick={() => router.refresh()}
-          >
-            Actualiser
-          </button>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-neutral-500">
+              Mes réservations
+            </p>
+            <h2 className="font-display text-2xl text-[#401f18]">QR codes &amp; suivis</h2>
+          </div>
+          <span className="text-sm text-neutral-500">
+            {paidRegistrations.length === 0
+              ? "Aucun billet confirmé"
+              : `${paidRegistrations.length} billet${paidRegistrations.length > 1 ? "s" : ""} confirmé${paidRegistrations.length > 1 ? "s" : ""}`}
+          </span>
         </div>
 
-        {projects.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-white/20 bg-black/50 px-6 py-10 text-center text-white/60">
-            Aucune création pour le moment. Lance une génération pour remplir ta galerie.
-          </p>
+        {paidRegistrations.length === 0 ? (
+          <Card className="border-[#eadacf] bg-white/90 text-neutral-500">
+            <CardContent className="py-12 text-center text-sm">
+              Aucun paiement finalisé pour le moment. Tes billets confirmés apparaîtront ici.
+            </CardContent>
+          </Card>
         ) : (
           <div className="grid gap-6 md:grid-cols-2">
-            {projects.map((project) => (
-              <article
-                key={project.id}
-                className="group overflow-hidden rounded-2xl border border-white/10 bg-black/60 shadow-lg"
-              >
-                <div className="relative">
-                  {project.output_image_url ? (
-                    <img
-                      src={project.output_image_url}
-                      alt="Portrait généré"
-                      className="h-72 w-full object-cover transition group-hover:scale-[1.02]"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="flex h-72 w-full items-center justify-center bg-black/60 text-center text-xs uppercase tracking-[0.3em] text-white/50">
-                      {project.payment_status === "paid"
-                        ? "Paiement validé — lancer la génération"
-                        : "Paiement Stripe en attente"}
-                    </div>
+            {paidRegistrations.map((registration) => {
+              const isHighlighted = highlightedRegistration === registration.id;
+              const amountLabel = formatAmount(registration.amount, registration.currency ?? DEFAULT_CURRENCY);
+              const isRecentlyConfirmed = registration.id === confirmedRegistrationId;
+              return (
+                <Card
+                  key={registration.id}
+                  className={cn(
+                    "border-[#eadacf] bg-white/95 shadow-lg shadow-[#7a1c1a]/10 transition",
+                    isHighlighted ? "ring-2 ring-[#7a1c1a]" : "hover:shadow-xl"
                   )}
-                  <div className="absolute right-4 top-4 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(project.id)}
-                      disabled={
-                        isDeleting[project.id] || (isGenerating && activeProjectId === project.id)
-                      }
-                      className="rounded-full bg-black/70 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white transition hover:bg-red-500/80 disabled:opacity-60"
-                    >
-                      {isDeleting[project.id] ? "Suppression…" : "Supprimer"}
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-3 px-5 py-4 text-sm text-white/70">
-                  <p className="font-medium text-white/90">
-                    Créé le {new Date(project.created_at).toLocaleString("fr-FR")}
-                  </p>
-                  <div className="flex flex-col gap-1 text-xs uppercase tracking-[0.25em] text-white/40">
-                    <span>Paiement : {formatPaymentStatus(project.payment_status)}</span>
-                    <span>Génération : {formatProjectStatus(project.status)}</span>
-                  </div>
-                  {project.payment_status === "paid" && project.status !== "completed" ? (
-                    <button
-                      type="button"
-                      onClick={() => handleLaunchGeneration(project.id)}
-                      className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.3em] text-white transition hover:bg-[var(--accent)] hover:text-black disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isGenerating || project.status === "processing"}
-                    >
-                      {isGenerating && activeProjectId === project.id
-                        ? "Génération…"
-                        : "Lancer la génération"}
-                    </button>
-                  ) : null}
-                </div>
-              </article>
-            ))}
+                >
+                  <CardHeader className="space-y-1">
+                    <div className="flex items-center justify-between text-xs uppercase tracking-[0.26em]">
+                      <span className="text-neutral-500">{MAIN_EVENT.title}</span>
+                      <span
+                        className={cn(
+                          "rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em]",
+                          "bg-emerald-200/35 text-emerald-700"
+                        )}
+                      >
+                        Confirmée
+                      </span>
+                    </div>
+                    <CardTitle className="text-lg text-[#401f18]">
+                      {registration.first_name} {registration.last_name}
+                    </CardTitle>
+                    <p className="text-sm text-neutral-500">{registration.email}</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-sm text-neutral-600">
+                    <p>
+                      <span className="font-semibold text-[#7a1c1a]">Participation :</span> {amountLabel}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-[#7a1c1a]">Téléphone :</span> {registration.phone}
+                    </p>
+                    <div className="space-y-4 rounded-2xl border border-[#eadacf] bg-[#fffaf5] p-4 text-center">
+                      <p className="text-xs uppercase tracking-[0.28em] text-[#7a1c1a]">
+                        QR code à présenter
+                      </p>
+                      {registration.qr_code_data_url ? (
+                        <Image
+                          src={registration.qr_code_data_url}
+                          alt={`QR code pour ${registration.first_name}`}
+                          width={160}
+                          height={160}
+                          unoptimized
+                          className="mx-auto h-40 w-40 rounded-2xl border border-white shadow-md shadow-[#7a1c1a]/15"
+                        />
+                      ) : (
+                        <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-[#eadacf] bg-white text-xs text-neutral-400">
+                          QR code en cours de génération…
+                        </div>
+                      )}
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {registration.qr_code_data_url ? (
+                          <Button
+                            asChild
+                            variant="ghost"
+                            className="px-0 text-[#7a1c1a] hover:bg-transparent"
+                          >
+                            <a href={registration.qr_code_data_url} download={`concerto-qr-${registration.id}.png`}>
+                              Télécharger le QR code
+                            </a>
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            disabled
+                            className="px-0 text-neutral-400"
+                          >
+                            QR code indisponible
+                          </Button>
+                        )}
+                        <Button
+                          asChild
+                          className="w-full bg-[#7a1c1a] text-white hover:bg-[#651815]"
+                        >
+                          <a
+                            href={`/api/registrations/${registration.id}/ticket`}
+                            download={`concerto-billet-${registration.id}.pdf`}
+                          >
+                            Télécharger le billet PDF
+                          </a>
+                        </Button>
+                      </div>
+                      <p className="text-xs text-neutral-400">
+                        {registration.qr_code_data_url
+                          ? "Présente ce QR code ou ton billet PDF à l'entrée."
+                          : "Ton billet se prépare. Utilise le bouton PDF pour le récupérer immédiatement."}
+                      </p>
+                      {isRecentlyConfirmed ? (
+                        <p className="text-xs text-neutral-400">
+                          Un email de confirmation est envoyé à l&apos;adresse {registration.email}.
+                        </p>
+                      ) : null}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </section>
-    </main>
+    </div>
+    {statusMessage && showStatusToast ? (
+      <div
+        role="status"
+        aria-live="polite"
+        className="fixed bottom-6 right-6 z-50 max-w-xs rounded-xl border border-emerald-200 bg-white/95 p-4 shadow-lg shadow-emerald-200/40"
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex-1 space-y-1">
+            <p className="text-xs uppercase tracking-[0.32em] text-emerald-600">Participation confirmée</p>
+            <p className="text-sm text-neutral-700">{statusMessage}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleDismissStatusToast}
+            className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600"
+            aria-label="Fermer la notification"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }
